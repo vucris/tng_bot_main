@@ -2,8 +2,7 @@
  * server.js
  * ------------------------------------------------------------------
  * Web server cho bộ TNB OPS:
- *   - Đăng nhập bằng GHN SSO v2 (OpenID Connect) — chỉ nhân viên GHN
- *     mới xem được dashboard.
+ *   - Đăng nhập bằng mật khẩu truy cập chung (không dùng GHN SSO nữa).
  *   - Phục vụ dashboard tại "/" (public/index.html), dashboard gọi
  *     các API /api/kpi/* bên dưới để lấy dữ liệu — đây chính là phần
  *     "kết nối HTML với bot": dashboard không còn dùng số liệu cứng
@@ -21,7 +20,6 @@ const express = require('express');
 const session = require('express-session');
 
 const gtalk = require('./gtalkClient');
-const sso = require('./sso');
 const { composeDailySummary, composeDropOfficesAlert, composeOprAlert } = require('./composeReport');
 const { fetchBusinessKPI, fetchOperationsKPI, fetchPeopleKPI, fetchTopDropOffices, fetchOprRanking, fetchTrends } = require('./data');
 const { start: startScheduler, runMorningAlert } = require('./scheduler');
@@ -29,6 +27,9 @@ const { start: startScheduler, runMorningAlert } = require('./scheduler');
 const WEBHOOK_SECRET = process.env.GTALK_WEBHOOK_SECRET;
 const TYPING_HEARTBEAT_INTERVAL_MS = 5000;
 const TYPING_HEARTBEAT_MAX_TICKS = 10;
+// Mật khẩu truy cập dashboard dùng chung — nên override qua env ACCESS_PASSWORD trên Render
+// thay vì dùng giá trị mặc định này, nhất là nếu repo public.
+const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || 'danhtng2026';
 
 const app = express();
 
@@ -69,38 +70,9 @@ function safeEqual(left, right) {
   return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-function destroySession(req) {
-  return new Promise((resolve) => req.session.destroy(() => resolve()));
-}
+/* ===================== AUTH (mật khẩu truy cập chung) ===================== */
 
-function destroySsoSessions({ sub, sid }) {
-  return new Promise((resolve, reject) => {
-    sessionStore.all((allErr, sessions) => {
-      if (allErr) return reject(allErr);
-      const matchingIds = Object.entries(sessions || {})
-        .filter(([, storedSession]) => (
-          (sid && (storedSession.ssoSid === sid || storedSession.user?.sid === sid))
-          || (sub && storedSession.user?.sub === sub)
-        ))
-        .map(([sessionId]) => sessionId);
-
-      if (!matchingIds.length) return resolve(0);
-      let remaining = matchingIds.length;
-      let firstError;
-      matchingIds.forEach((sessionId) => {
-        sessionStore.destroy(sessionId, (destroyErr) => {
-          if (destroyErr && !firstError) firstError = destroyErr;
-          remaining -= 1;
-          if (remaining === 0) return firstError ? reject(firstError) : resolve(matchingIds.length);
-        });
-      });
-    });
-  });
-}
-
-/* ===================== AUTH (GHN SSO v2 / OIDC) ===================== */
-
-/** Chặn dashboard và API nếu chưa đăng nhập qua GHN SSO. */
+/** Chặn dashboard và API nếu chưa đăng nhập bằng mật khẩu truy cập. */
 function requireAuth(req, res, next) {
   const remoteAddress = req.socket.remoteAddress || '';
   const isLoopbackRequest = remoteAddress === '127.0.0.1'
@@ -109,134 +81,52 @@ function requireAuth(req, res, next) {
   const localBypassEnabled = process.env.DEV_BYPASS_AUTH === 'true'
     && process.env.NODE_ENV !== 'production'
     && isLoopbackRequest;
-  if (localBypassEnabled && !req.session.user) {
-    req.session.user = {
-      sub: 'local-preview',
-      name: 'Danh TNB',
-      preferred_username: 'local-preview',
-      jobtitle_name: 'Chế độ xem thử local',
-      team_name: 'Vùng Tây Nam Bộ',
-    };
-  }
-  if (req.session.user) return next();
+  if (localBypassEnabled) req.session.authenticated = true;
+
+  if (req.session.authenticated) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'unauthenticated' });
   return res.redirect('/auth/login');
 }
 
+// Trang nhập mật khẩu — phải đứng trước middleware static+requireAuth bên dưới
+// để truy cập được khi chưa đăng nhập.
 app.get('/auth/login', (req, res) => {
-  if (req.session.user) return res.redirect('/');
-  try {
-    const { url, state, nonce, codeVerifier } = sso.buildAuthorizeUrl();
-    req.session.oauthState = state;
-    req.session.oauthNonce = nonce;
-    req.session.oauthCodeVerifier = codeVerifier;
-    return req.session.save((err) => {
-      if (err) return res.status(500).send('Không thể khởi tạo phiên đăng nhập SSO.');
-      return res.redirect(url);
-    });
-  } catch (err) {
-    console.error('[auth/login]', err.message);
-    return res.status(503).send(`Chưa thể đăng nhập GHN SSO: ${err.message}`);
-  }
+  if (req.session.authenticated) return res.redirect('/');
+  return res.sendFile(path.join(__dirname, '..', 'public', 'login.html'));
 });
 
-app.get('/auth/callback', async (req, res) => {
-  try {
-    const { code, state, error, error_description: errDesc } = req.query;
-    if (!safeEqual(state, req.session.oauthState)) {
-      throw new Error('State không khớp — từ chối đăng nhập (chống CSRF)');
+app.post('/auth/login', (req, res) => {
+  const submitted = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!safeEqual(submitted, ACCESS_PASSWORD)) {
+    return res.status(401).json({ ok: false, error: 'Mật khẩu truy cập không chính xác' });
+  }
+  return req.session.regenerate((regenerateErr) => {
+    if (regenerateErr) {
+      console.error('[auth/login]', regenerateErr.message);
+      return res.status(500).json({ ok: false, error: 'Không thể tạo phiên đăng nhập.' });
     }
-
-    const expectedNonce = req.session.oauthNonce;
-    const codeVerifier = req.session.oauthCodeVerifier;
-    delete req.session.oauthState;
-    delete req.session.oauthNonce;
-    delete req.session.oauthCodeVerifier;
-    await new Promise((resolve, reject) => req.session.save((saveErr) => (saveErr ? reject(saveErr) : resolve())));
-
-    if (error) throw new Error(errDesc || error);
-    if (!code) throw new Error('SSO không trả về authorization code');
-
-    const tokens = await sso.exchangeCode(code, codeVerifier);
-    const claims = await sso.verifyIdToken(tokens.id_token, expectedNonce);
-    const profile = await sso.getUserInfo(tokens.access_token, claims.sub);
-
-    req.session.regenerate((regenerateErr) => {
-      if (regenerateErr) {
-        console.error('[auth/callback]', regenerateErr.message);
-        return res.status(500).send('Không thể tạo phiên đăng nhập.');
+    req.session.authenticated = true;
+    return req.session.save((saveErr) => {
+      if (saveErr) {
+        console.error('[auth/login]', saveErr.message);
+        return res.status(500).json({ ok: false, error: 'Không thể lưu phiên đăng nhập.' });
       }
-      req.session.user = { ...claims, ...profile };
-      req.session.idToken = tokens.id_token;
-      req.session.ssoSid = claims.sid;
-      return req.session.save((saveErr) => {
-        if (saveErr) {
-          console.error('[auth/callback]', saveErr.message);
-          return res.status(500).send('Không thể lưu phiên đăng nhập.');
-        }
-        return res.redirect('/');
-      });
+      return res.json({ ok: true });
     });
-  } catch (err) {
-    console.error('[auth/callback]', err.message);
-    return res.status(401).send(`Đăng nhập GHN SSO thất bại: ${err.message}`);
-  }
-});
-
-app.get('/auth/logout', (req, res) => {
-  const idToken = req.session.idToken;
-  let logoutRequest;
-  try {
-    logoutRequest = sso.buildLogoutUrl(idToken);
-  } catch (err) {
-    console.error('[auth/logout]', err.message);
-    return destroySession(req).then(() => {
-      res.clearCookie('tnb_ops_sid');
-      return res.redirect('/auth/logged-out');
-    });
-  }
-
-  req.session.user = null;
-  req.session.idToken = null;
-  req.session.ssoSid = null;
-  req.session.logoutState = logoutRequest.state;
-  return req.session.save((saveErr) => {
-    if (saveErr) {
-      console.error('[auth/logout]', saveErr.message);
-      return destroySession(req).then(() => res.redirect('/auth/logged-out'));
-    }
-    return res.redirect(logoutRequest.url);
   });
 });
 
-app.get('/auth/logout/callback', async (req, res) => {
-  const stateMatches = safeEqual(req.query.state, req.session.logoutState);
-  await destroySession(req);
-  res.clearCookie('tnb_ops_sid');
-  if (!stateMatches) return res.status(400).send('Logout state không hợp lệ. Phiên cục bộ đã được huỷ.');
-  return res.redirect('/auth/logged-out');
+app.get('/auth/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie('tnb_ops_sid');
+    res.redirect('/auth/login');
+  });
 });
 
-app.get('/auth/logged-out', (req, res) => {
-  res.status(200).send(`<!doctype html><html lang="vi"><meta charset="utf-8"><title>Đã đăng xuất</title>
-    <body style="font-family:system-ui;background:#060b18;color:#e9eef8;display:grid;place-items:center;min-height:100vh;margin:0">
-    <main style="text-align:center"><h1>Đã đăng xuất an toàn</h1><p style="color:#8c9bb5">Phiên GHN SSO và phiên dashboard đã kết thúc.</p>
-    <a href="/auth/login" style="display:inline-block;margin-top:12px;padding:12px 20px;border-radius:10px;background:#ff7a1a;color:white;text-decoration:none;font-weight:700">Đăng nhập lại</a></main></body></html>`);
-});
-
-app.post('/auth/backchannel-logout', async (req, res) => {
-  try {
-    const claims = await sso.verifyLogoutToken(req.body?.logout_token);
-    const destroyed = await destroySsoSessions({ sub: claims.sub, sid: claims.sid });
-    console.log(`[auth/backchannel-logout] Đã huỷ ${destroyed} session`);
-    return res.sendStatus(200);
-  } catch (err) {
-    console.error('[auth/backchannel-logout]', err.message);
-    return res.status(400).json({ error: 'invalid_logout_token' });
-  }
-});
-
-app.get('/api/me', requireAuth, (req, res) => res.json(req.session.user));
+app.get('/api/me', requireAuth, (req, res) => res.json({
+  name: 'Quản trị viên TNB',
+  jobtitle_name: 'Vận hành vùng Tây Nam Bộ',
+}));
 
 /* ===================== DASHBOARD (KPI API) =====================
  * Dùng chung data.js với bot GTalk — sửa số liệu ở src/data.js
@@ -368,10 +258,10 @@ app.post('/webhooks/gtalk', async (req, res) => {
 /* ===================== STATIC DASHBOARD ===================== */
 
 // Đặt trước middleware requireAuth bên dưới để healthcheck (Render, v.v.)
-// luôn trả 200 mà không cần đăng nhập SSO.
+// luôn trả 200 mà không cần đăng nhập.
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
-// Toàn bộ dashboard (public/) yêu cầu đăng nhập GHN SSO trước khi xem.
+// Toàn bộ dashboard (public/) yêu cầu nhập mật khẩu truy cập trước khi xem.
 app.use('/', requireAuth, express.static(path.join(__dirname, '..', 'public')));
 
 // Error handler chung cho các route /api/*
@@ -382,9 +272,9 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`[server] TNB OPS đang chạy tại http://localhost:${PORT}`);
-  console.log(`[server] Đăng nhập GHN SSO tại http://localhost:${PORT}/auth/login`);
+  console.log(`[server] Đăng nhập tại http://localhost:${PORT}/auth/login`);
   if (process.env.DEV_BYPASS_AUTH === 'true' && process.env.NODE_ENV !== 'production') {
-    console.warn('⚠️  [server] DEV_BYPASS_AUTH=true — SSO chỉ đang được bỏ qua để xem thử local.');
+    console.warn('⚠️  [server] DEV_BYPASS_AUTH=true — đăng nhập chỉ đang được bỏ qua để xem thử local.');
   }
   startScheduler();
 });

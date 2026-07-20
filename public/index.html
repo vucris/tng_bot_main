@@ -1307,7 +1307,7 @@ function upsertChart(id, buildConfig){
   const config = buildConfig();
   if(charts[id]){
     const chart = charts[id];
-    chart.data.labels = config.data.labels;
+    chart.data.labels = config.data.labels || [];
     config.data.datasets.forEach((ds, i)=>{
       if(chart.data.datasets[i]) Object.assign(chart.data.datasets[i], ds);
       else chart.data.datasets[i] = ds;
@@ -1687,7 +1687,7 @@ function renderOperationsCharts(){
     if(s.ontimeGtcTTSPct !== null){
       upsertChart('gaugeOntime', ()=>({
         type:'doughnut',
-        data:{datasets:[{data:[s.ontimeGtcTTSPct, Math.max(100-s.ontimeGtcTTSPct,0)], backgroundColor:[ontimeColor,'rgba(255,255,255,0.05)'], borderWidth:0}]},
+        data:{labels:[], datasets:[{data:[s.ontimeGtcTTSPct, Math.max(100-s.ontimeGtcTTSPct,0)], backgroundColor:[ontimeColor,'rgba(255,255,255,0.05)'], borderWidth:0}]},
         options:{circumference:180, rotation:270, cutout:'76%', plugins:{legend:{display:false}, tooltip:{enabled:false}}},
       }));
       setText('gvOntime', fmtPct(s.ontimeGtcTTSPct));
@@ -1700,7 +1700,7 @@ function renderOperationsCharts(){
       const fdColor = fdOk ? '#34d386' : '#f4536a';
       upsertChart('gaugeFD', ()=>({
         type:'doughnut',
-        data:{datasets:[{data:[s.fdTTSPct, Math.max(10-s.fdTTSPct,0)], backgroundColor:[fdColor,'rgba(255,255,255,0.05)'], borderWidth:0}]},
+        data:{labels:[], datasets:[{data:[s.fdTTSPct, Math.max(10-s.fdTTSPct,0)], backgroundColor:[fdColor,'rgba(255,255,255,0.05)'], borderWidth:0}]},
         options:{circumference:180, rotation:270, cutout:'76%', plugins:{legend:{display:false}, tooltip:{enabled:false}}},
       }));
       setText('gvFD', fmtPct(s.fdTTSPct));
@@ -1713,7 +1713,7 @@ function renderOperationsCharts(){
     const oprColor = o.grandTotal >= th ? '#34d386' : '#f5b52a';
     upsertChart('gaugeOPR', ()=>({
       type:'doughnut',
-      data:{datasets:[{data:[o.grandTotal, Math.max(100-o.grandTotal,0)], backgroundColor:[oprColor,'rgba(255,255,255,0.05)'], borderWidth:0}]},
+      data:{labels:[], datasets:[{data:[o.grandTotal, Math.max(100-o.grandTotal,0)], backgroundColor:[oprColor,'rgba(255,255,255,0.05)'], borderWidth:0}]},
       options:{circumference:180, rotation:270, cutout:'76%', plugins:{legend:{display:false}, tooltip:{enabled:false}}},
     }));
     setText('gvOPR', fmtPct(o.grandTotal));

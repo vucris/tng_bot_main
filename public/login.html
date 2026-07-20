@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Đăng nhập — GHN OPS Tây Nam Bộ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1220; --panel:#131c2e; --border:rgba(160,180,215,0.14);
+    --text:#eef2fa; --text-dim:#9fadc6; --text-faint:#64748d;
+    --orange:#ff7a1a; --orange-2:#f96a10; --bad:#f4536a; --bad-soft:rgba(244,83,106,0.11);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    min-height:100vh; display:grid; place-items:center;
+    background: radial-gradient(ellipse 700px 500px at 50% 0%, rgba(255,122,26,0.08), transparent 60%), #0a111f;
+    color:var(--text); font-family:'Inter',system-ui,sans-serif; padding:20px;
+  }
+  .card{
+    width:100%; max-width:380px; background:var(--panel); border:1px solid var(--border);
+    border-radius:16px; padding:32px 28px; box-shadow:0 10px 32px rgba(3,8,20,0.45);
+    text-align:center;
+  }
+  .lock{
+    width:56px; height:56px; margin:0 auto 16px; border-radius:14px;
+    background:linear-gradient(135deg, var(--orange), var(--orange-2));
+    display:flex; align-items:center; justify-content:center; font-size:24px;
+  }
+  h1{font-family:'Sora'; font-size:19px; font-weight:700; margin-bottom:6px;}
+  .sub{font-size:12.5px; color:var(--text-dim); margin-bottom:24px; line-height:1.5;}
+  label{display:block; text-align:left; font-size:11px; font-weight:600; letter-spacing:0.4px; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px;}
+  .field{position:relative; margin-bottom:14px;}
+  .field .ic{position:absolute; left:14px; top:50%; transform:translateY(-50%); opacity:0.5; font-size:14px;}
+  input[type="password"]{
+    width:100%; padding:12px 14px 12px 38px; border-radius:10px;
+    border:1px solid var(--border); background:#0f1828; color:var(--text);
+    font-size:14px; font-family:inherit; transition:border-color 0.2s;
+  }
+  input[type="password"]:focus{outline:none; border-color:var(--orange);}
+  input[type="password"]::placeholder{color:var(--text-faint);}
+  .error{
+    display:none; align-items:center; gap:8px; text-align:left;
+    background:var(--bad-soft); border:1px solid rgba(244,83,106,0.3); color:#ff93a1;
+    border-radius:10px; padding:10px 12px; font-size:12.5px; margin-bottom:14px;
+  }
+  .error.show{display:flex;}
+  button{
+    width:100%; padding:13px; border:none; border-radius:10px; cursor:pointer;
+    background:var(--orange); color:#fff; font-weight:700; font-size:13.5px;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:background 0.2s;
+  }
+  button:hover:not(:disabled){background:var(--orange-2);}
+  button:disabled{opacity:0.65; cursor:wait;}
+  footer{margin-top:20px; font-size:10.5px; color:var(--text-faint);}
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="lock">🔒</div>
+    <h1>GHN OPS · TÂY NAM BỘ</h1>
+    <div class="sub">Bảng điều khiển vận hành &amp; kinh doanh vùng<br>Vui lòng nhập mật khẩu truy cập</div>
+    <form id="loginForm" novalidate>
+      <label for="password">Mật khẩu truy cập</label>
+      <div class="field">
+        <span class="ic">🔑</span>
+        <input type="password" id="password" name="password" placeholder="Nhập mật khẩu…" autocomplete="current-password" autofocus required>
+      </div>
+      <div class="error" id="errorBox"><span>⚠️</span><span id="errorText">Mật khẩu truy cập không chính xác</span></div>
+      <button type="submit" id="submitBtn">Xác thực đăng nhập →</button>
+    </form>
+    <footer>© 2026 GHN — Hệ thống điều hành Vùng Tây Nam Bộ</footer>
+  </main>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const errorBox = document.getElementById('errorBox');
+    const errorText = document.getElementById('errorText');
+    const submitBtn = document.getElementById('submitBtn');
+    const passwordInput = document.getElementById('password');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.classList.remove('show');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Đang xác thực…';
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ password: passwordInput.value }),
+        });
+        const json = await res.json();
+        if (json.ok) {
+          window.location.href = '/';
+          return;
+        }
+        errorText.textContent = json.error || 'Mật khẩu truy cập không chính xác';
+        errorBox.classList.add('show');
+        passwordInput.value = '';
+        passwordInput.focus();
+      } catch (err) {
+        errorText.textContent = 'Không kết nối được máy chủ — thử lại sau.';
+        errorBox.classList.add('show');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Xác thực đăng nhập →';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -15,16 +15,9 @@ services:
         value: "false"
       - key: SESSION_SECRET
         generateValue: true
-      # GHN SSO v2 / OpenID Connect — điền trên Render dashboard (Environment tab)
-      - key: SSO_BASE_URL
-        sync: false
-      - key: SSO_CLIENT_ID
-        sync: false
-      - key: SSO_CLIENT_SECRET
-        sync: false
-      - key: SSO_REDIRECT_URI
-        sync: false
-      - key: SSO_POST_LOGOUT_REDIRECT_URI
+      # Mật khẩu truy cập dashboard (thay cho GHN SSO) — điền trên Render dashboard,
+      # nếu để trống code sẽ dùng mặc định "danhtng2026" trong server.js.
+      - key: ACCESS_PASSWORD
         sync: false
       # GTalk
       - key: GTALK_BASE_URL
