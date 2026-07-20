@@ -367,10 +367,12 @@ app.post('/webhooks/gtalk', async (req, res) => {
 
 /* ===================== STATIC DASHBOARD ===================== */
 
+// Đặt trước middleware requireAuth bên dưới để healthcheck (Render, v.v.)
+// luôn trả 200 mà không cần đăng nhập SSO.
+app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+
 // Toàn bộ dashboard (public/) yêu cầu đăng nhập GHN SSO trước khi xem.
 app.use('/', requireAuth, express.static(path.join(__dirname, '..', 'public')));
-
-app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
 // Error handler chung cho các route /api/*
 app.use((err, req, res, next) => {
