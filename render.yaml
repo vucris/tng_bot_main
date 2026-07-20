@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: tnb-ops-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DEV_BYPASS_AUTH
+        value: "false"
+      - key: SESSION_SECRET
+        generateValue: true
+      # GHN SSO v2 / OpenID Connect — điền trên Render dashboard (Environment tab)
+      - key: SSO_BASE_URL
+        sync: false
+      - key: SSO_CLIENT_ID
+        sync: false
+      - key: SSO_CLIENT_SECRET
+        sync: false
+      - key: SSO_REDIRECT_URI
+        sync: false
+      - key: SSO_POST_LOGOUT_REDIRECT_URI
+        sync: false
+      # GTalk
+      - key: GTALK_BASE_URL
+        sync: false
+      - key: GTALK_USERNAME
+        sync: false
+      - key: GTALK_PASSWORD
+        sync: false
+      - key: GTALK_OA_ID
+        sync: false
+      - key: GTALK_CHANNEL_ID
+        sync: false
+      - key: GTALK_WEBHOOK_SECRET
+        sync: false
+      - key: ALERT_CRON
+        value: "30 8 * * *"
+      - key: DASHBOARD_URL
+        sync: false
