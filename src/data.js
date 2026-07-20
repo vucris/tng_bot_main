@@ -1,64 +1,51 @@
 /**
  * data.js
  * ------------------------------------------------------------------
- * Lớp dữ liệu KPI cho vùng Tây Nam Bộ (TNB).
+ * Lớp dữ liệu KPI cho vùng Tây Nam Bộ (TNB) — đọc trực tiếp từ
+ * Google Sheet công khai (Anyone with link — Viewer), qua src/googleSheets.js.
  *
- * Hiện tại trả về DỮ LIỆU DEMO (giống dashboard demo).
- * Khi tích hợp thật, thay nội dung bên trong từng hàm fetch* bằng
- * truy vấn API/DB nội bộ (SME Sales API, TTS Fulfillment API, OPR API...).
- * Không cần đổi chữ ký hàm — phần composeReport.js sẽ tự chạy đúng.
+ * 2 sheet nguồn:
+ *   OPS_SHEET_ID — "TNB - CHỈ SỐ VẬN HÀNH": doanh thu, GTC/Ontime, OPR,
+ *                   FD, tồn Aging, bưu cục bất ổn.
+ *   HR_SHEET_ID  — nhân sự đang làm việc / nghỉ việc / top BC thiếu NV.
+ *
+ * Một số chỉ số KHÔNG có trong 2 sheet trên (không đoán/bịa số liệu):
+ *   - Kế hoạch doanh thu tháng, khách hàng SME mới/đang hoạt động
+ *   - Tỷ lệ chấm công, nghỉ phép/vắng mặt hôm nay, ngoại lệ chấm công
+ *   - Vị trí đang tuyển, tỷ lệ giao thành công (deliverySuccessPct)
+ *   - Doanh thu theo tỉnh (sheet doanh thu chỉ có tổng vùng, không tách tỉnh)
+ * Các trường này trả về null/[] — public/index.html đã được ẩn card/panel
+ * tương ứng, không hiển thị số liệu giả.
  * ------------------------------------------------------------------
  */
 
-const fs = require('fs');
-const path = require('path');
+const {
+  fetchSheetObjects, toNumber, parseYmdSlash, parseMdySlash, parseDmySlash, parseDdMonYy, fmtDateVN,
+} = require('./googleSheets');
 
-const PEOPLE_DEMO_FILE = path.join(__dirname, '..', 'data', 'people-demo.tsv');
-let cachedDemoEmployees;
+const OPS_SHEET_ID = '1l8aOUH7S5t2-l8hJF4a5rjve7tA6T7M1032HyPwbxjs';
+const HR_SHEET_ID = '1gczNtdEGmeSjAHXJxc3EEVUb_TO2rUdO099SBUs8xlw';
+
+const GID = {
+  revenue: '549345790', // Doanh thu GTTC: Vung, Ngay(DD-Mon-YY), DoanhThu, Volume
+  gtcOntime: '567744215', // Gán/GTC: Quản lý, Chi tiết, Time, GTC, %Ontime, Ontime Volume, AM, Ngay(YYYY/MM/DD), Tỉnh, Week
+  opr: '674321180', // OPR: cùng cấu trúc gtcOntime nhưng có Vol LTC, %OPR
+  fd: '1696138109', // FD: Quản lý, Chi tiết, Time, %vol, % Return, Ngay(M/D/YYYY), Tỉnh, Week
+  aging: '86218480', // Aging>5 ngày: 1 dòng = 1 đơn tồn, snapshot hiện tại (không có lịch sử)
+  unstableOffices: '1265218209', // BC bất ổn: ngay(D/M/YYYY), kho_giao_name, bl lm, bl lm >5 ngay, %bl lm >5 ngay...
+};
+
+const HR_GID = {
+  active: '0', // Nhân sự còn làm việc: ID, Tên nhân viên, Chức vụ, Ngày vào làm, Trạng thái, Bưu cục, Zone, AM, Loại HĐ, Tỉnh, Vùng, Thâm niên
+};
+
+// Ngưỡng KPI vùng — do nghiệp vụ GHN quy định, không có trong sheet.
+const ONTIME_TARGET_PCT = 96;
+const FD_WARN_THRESHOLD_PCT = 5;
+const OPR_THRESHOLD_PCT = 80;
 
 function todayVN() {
   return new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-}
-
-function normalizeText(value) {
-  return String(value || '').trim().normalize('NFC');
-}
-
-function loadDemoEmployees() {
-  if (cachedDemoEmployees) return cachedDemoEmployees;
-  if (!fs.existsSync(PEOPLE_DEMO_FILE)) return [];
-
-  const seenEmployeeIds = new Set();
-  cachedDemoEmployees = fs.readFileSync(PEOPLE_DEMO_FILE, 'utf8')
-    .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .map((line, index) => {
-      const columns = line.split('\t');
-      if (columns.length !== 13) {
-        throw new Error(`Dữ liệu nhân sự dòng ${index + 1} có ${columns.length} cột, yêu cầu 13 cột`);
-      }
-      const employee = {
-        employeeId: normalizeText(columns[0]),
-        name: normalizeText(columns[1]),
-        jobTitle: normalizeText(columns[2]),
-        startDate: normalizeText(columns[3]),
-        endDate: normalizeText(columns[4]),
-        status: normalizeText(columns[5]),
-        office: normalizeText(columns[6]),
-        zone: normalizeText(columns[7]),
-        manager: normalizeText(columns[8]),
-        contractType: normalizeText(columns[9]),
-        province: normalizeText(columns[10]),
-        region: normalizeText(columns[11]),
-        tenureGroup: normalizeText(columns[12]),
-      };
-      if (!employee.employeeId || seenEmployeeIds.has(employee.employeeId)) {
-        throw new Error(`Mã nhân viên trống hoặc trùng tại dòng ${index + 1}`);
-      }
-      seenEmployeeIds.add(employee.employeeId);
-      return employee;
-    });
-  return cachedDemoEmployees;
 }
 
 function parseVietnameseDate(value) {
@@ -74,51 +61,142 @@ function summarizeBy(items, field) {
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'vi'));
 }
 
-/** Doanh thu SME + tăng trưởng */
+/** Trả về [{date, ...row}] đã parse ngày + sort tăng dần, bỏ dòng không parse được ngày. */
+function withParsedDate(rows, dateField, parseFn) {
+  return rows
+    .map((r) => ({ ...r, __date: parseFn(r[dateField]) }))
+    .filter((r) => r.__date)
+    .sort((a, b) => a.__date - b.__date);
+}
+
+function isSameYMD(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/* ======================== Doanh thu SME (Business KPI) ======================== */
+
 async function fetchBusinessKPI() {
-  // TODO: thay bằng gọi API SME Sales thật, ví dụ:
-  // const res = await fetch(`${process.env.SME_API_URL}/revenue/daily?region=TNB`);
+  const rows = await fetchSheetObjects(OPS_SHEET_ID, GID.revenue);
+  const parsed = withParsedDate(rows, 'Ngay', parseDdMonYy)
+    .map((r) => ({ date: r.__date, doanhThu: toNumber(r.DoanhThu) }))
+    .filter((r) => r.doanhThu !== null);
+
+  if (!parsed.length) {
+    return {
+      date: todayVN(), revenueToday: null, revenueDeltaDayPct: null, revenueMTD: null, growthMoMPct: null,
+      revenueTargetMTD: null, revenueTargetPct: null, newCustomersToday: null, activeCustomers: null,
+    };
+  }
+
+  const latest = parsed[parsed.length - 1];
+  const prevDayIndex = parsed.length - 2;
+  const prevDay = prevDayIndex >= 0 ? parsed[prevDayIndex] : null;
+
+  const revenueToday = latest.doanhThu / 1e9;
+  const revenueDeltaDayPct = prevDay && prevDay.doanhThu > 0
+    ? ((latest.doanhThu - prevDay.doanhThu) / prevDay.doanhThu) * 100
+    : null;
+
+  const mtdRows = parsed.filter((r) => r.date.getFullYear() === latest.date.getFullYear() && r.date.getMonth() === latest.date.getMonth());
+  const revenueMTDRaw = mtdRows.reduce((s, r) => s + r.doanhThu, 0);
+  const revenueMTD = revenueMTDRaw / 1e9;
+
+  const dayOfMonth = latest.date.getDate();
+  const prevMonthDate = new Date(latest.date.getFullYear(), latest.date.getMonth() - 1, 1);
+  const prevMonthSamePeriod = parsed.filter((r) => (
+    r.date.getFullYear() === prevMonthDate.getFullYear()
+    && r.date.getMonth() === prevMonthDate.getMonth()
+    && r.date.getDate() <= dayOfMonth
+  )).reduce((s, r) => s + r.doanhThu, 0);
+  const growthMoMPct = prevMonthSamePeriod > 0
+    ? ((revenueMTDRaw - prevMonthSamePeriod) / prevMonthSamePeriod) * 100
+    : null;
+
   return {
-    date: todayVN(),
-    revenueToday: 1.85,        // tỷ đồng
-    revenueDeltaDayPct: 8.3,   // % so với hôm qua
-    revenueMTD: 38.6,          // tỷ đồng, lũy kế tháng
-    growthMoMPct: 12.4,        // % tăng trưởng tháng n so với n-1
-    revenueTargetMTD: 45.0,    // kế hoạch doanh thu tháng
-    revenueTargetPct: 85.8,    // % hoàn thành kế hoạch tháng
-    newCustomersToday: 37,     // khách hàng SME mới trong ngày
-    activeCustomers: 1284,
+    date: fmtDateVN(latest.date),
+    revenueToday,
+    revenueDeltaDayPct,
+    revenueMTD,
+    growthMoMPct,
+    // Không có nguồn thật — dashboard đã ẩn card liên quan.
+    revenueTargetMTD: null,
+    revenueTargetPct: null,
+    newCustomersToday: null,
+    activeCustomers: null,
   };
 }
 
-/** GTC TTS + Ontime + FD */
+/* ======================== Vận hành: GTC/Ontime + FD + Backlog ======================== */
+
 async function fetchOperationsKPI() {
-  // TODO: thay bằng gọi API TTS Fulfillment thật
+  const [gtcRows, fdRows, agingRows] = await Promise.all([
+    fetchSheetObjects(OPS_SHEET_ID, GID.gtcOntime),
+    fetchSheetObjects(OPS_SHEET_ID, GID.fd),
+    fetchSheetObjects(OPS_SHEET_ID, GID.aging),
+  ]);
+
+  const gtcGrandTotals = withParsedDate(
+    gtcRows.filter((r) => r['Chi tiết'] === 'Grand Total'),
+    'Ngay',
+    parseYmdSlash,
+  );
+  const fdGrandTotals = withParsedDate(
+    fdRows.filter((r) => r['Chi tiết'] === 'Grand Total'),
+    'Ngay',
+    parseMdySlash,
+  );
+
+  const latestGtc = gtcGrandTotals[gtcGrandTotals.length - 1] || null;
+  const prevGtc = gtcGrandTotals.length >= 2 ? gtcGrandTotals[gtcGrandTotals.length - 2] : null;
+  const latestFd = fdGrandTotals[fdGrandTotals.length - 1] || null;
+
+  const gtcTTS = latestGtc ? toNumber(latestGtc.GTC) : null;
+  const prevGtcValue = prevGtc ? toNumber(prevGtc.GTC) : null;
+  const gtcDeltaDayPct = gtcTTS !== null && prevGtcValue ? ((gtcTTS - prevGtcValue) / prevGtcValue) * 100 : null;
+  const ontimeGtcTTSPct = latestGtc ? toNumber(latestGtc['%Ontime']) : null;
+  const fdTTSPct = latestFd ? toNumber(latestFd['% Return']) : null;
+
   return {
-    gtcTTS: 18450,
-    gtcDeltaDayPct: 5.1,
-    ontimeGtcTTSPct: 94.2,
-    ontimeTargetPct: 96,
-    fdTTSPct: 3.8,
-    fdWarnThresholdPct: 5,
-    deliverySuccessPct: 92.6,
-    backlogOrders: 684,
-    backlogDeltaDayPct: -6.4,
+    gtcTTS,
+    gtcDeltaDayPct,
+    ontimeGtcTTSPct,
+    ontimeTargetPct: ONTIME_TARGET_PCT,
+    fdTTSPct,
+    fdWarnThresholdPct: FD_WARN_THRESHOLD_PCT,
+    // Không có nguồn thật cho tỷ lệ giao thành công tổng — dashboard đã ẩn card này.
+    deliverySuccessPct: null,
+    backlogOrders: agingRows.length, // snapshot hiện tại, tab Aging chỉ có 1 mốc thời gian
+    backlogDeltaDayPct: null, // không có lịch sử để so sánh
   };
 }
 
-/** Biên chế, chấm công và trạng thái nhân sự vùng */
+/* ======================== Nhân sự ======================== */
+
 async function fetchPeopleKPI() {
-  // TODO: thay bằng HRIS/Timesheet API thật.
-  const employees = loadDemoEmployees();
-  const activeEmployees = employees.filter((employee) => employee.status === 'Đang làm việc').length;
-  const currentDateParts = new Intl.DateTimeFormat('en', {
-    timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: 'numeric', day: 'numeric',
-  }).formatToParts(new Date());
-  const currentYear = Number(currentDateParts.find((part) => part.type === 'year').value);
-  const currentMonth = Number(currentDateParts.find((part) => part.type === 'month').value);
-  const newHiresMTD = employees.filter((employee) => {
-    const date = parseVietnameseDate(employee.startDate);
+  const rows = await fetchSheetObjects(HR_SHEET_ID, HR_GID.active);
+  const employees = rows.map((r) => ({
+    employeeId: r.ID,
+    name: r['Tên nhân viên'],
+    jobTitle: r['Chức vụ'],
+    startDate: r['Ngày vào làm'],
+    endDate: r['Ngày nghỉ việc'] || '',
+    status: r['Trạng thái'],
+    office: r['Bưu cục'],
+    zone: r.Zone,
+    manager: r.AM,
+    contractType: r['Loại HĐ'],
+    province: r['Tỉnh'],
+    region: r['Vùng'],
+    tenureGroup: r['Thâm niên'],
+  }));
+
+  const activeEmployees = employees.filter((e) => e.status === 'Đang làm việc').length;
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const newHiresMTD = employees.filter((e) => {
+    const date = parseVietnameseDate(e.startDate);
     return date?.year === currentYear && date?.month === currentMonth;
   }).length;
 
@@ -126,102 +204,143 @@ async function fetchPeopleKPI() {
     date: todayVN(),
     totalEmployees: employees.length,
     activeEmployees,
-    attendanceRatePct: 96.8,
-    attendanceTargetPct: 97,
-    onLeaveToday: 6,
-    absentToday: 2,
-    openPositions: 9,
     newHiresMTD,
-    attendance7d: [96.1, 97.4, 96.9, 97.2, 96.5, 95.8, 96.8],
     headcountByProvince: summarizeBy(employees, 'province'),
     jobTitleSummary: summarizeBy(employees, 'jobTitle'),
     tenureSummary: summarizeBy(employees, 'tenureGroup'),
     employees,
-    attendanceExceptions: [
-      { name: 'Nguyễn Hoàng Phúc', unit: 'Kiên Giang', status: 'Nghỉ phép', shift: 'Ca sáng' },
-      { name: 'Trần Minh Khoa', unit: 'Cà Mau', status: 'Nghỉ phép', shift: 'Ca chiều' },
-      { name: 'Lê Thị Ngọc', unit: 'Cần Thơ', status: 'Công tác', shift: 'Hành chính' },
-      { name: 'Phạm Anh Tuấn', unit: 'An Giang', status: 'Vắng mặt', shift: 'Ca sáng' },
-      { name: 'Võ Thanh Hà', unit: 'Sóc Trăng', status: 'Nghỉ phép', shift: 'Hành chính' },
-    ],
+    // Không có nguồn dữ liệu chấm công/nghỉ phép/tuyển dụng — dashboard đã ẩn các card/panel liên quan.
+    attendanceRatePct: null,
+    attendanceTargetPct: null,
+    onLeaveToday: null,
+    absentToday: null,
+    openPositions: null,
+    attendance7d: [],
+    attendanceExceptions: [],
   };
 }
 
-/** Top 10 bưu cục rớt luân chuyển TTS */
+/* ======================== Top 10 bưu cục bất ổn (rớt luân chuyển) ======================== */
+
 async function fetchTopDropOffices() {
-  // TODO: thay bằng truy vấn dữ liệu rớt luân chuyển thật, sắp theo orders giảm dần, lấy top 10
+  const rows = await fetchSheetObjects(OPS_SHEET_ID, GID.unstableOffices);
+  const parsed = rows
+    .map((r) => ({
+      name: r.ten_kho_cu || r.kho_giao_name,
+      orders: toNumber(r['bl lm >5 ngay']),
+      rate: toNumber(r['%bl lm >5 ngay']),
+      blLm: toNumber(r['bl lm']),
+      ngay: parseDmySlash(r.ngay),
+    }))
+    .filter((r) => r.name && r.orders !== null);
+
+  const items = [...parsed].sort((a, b) => b.orders - a.orders).slice(0, 10);
+  const totalOrders = parsed.reduce((s, r) => s + (r.orders || 0), 0);
+  const totalBlLm = parsed.reduce((s, r) => s + (r.blLm || 0), 0);
+  const grandTotalRate = totalBlLm > 0 ? +((totalOrders / totalBlLm) * 100).toFixed(1) : null;
+
+  const latestDate = parsed.find((r) => r.ngay)?.ngay || null;
+
   return {
-    date: todayVN(),
-    items: [
-      { name: '238 Quốc Lộ 80-Kiên Lương-Kiên Giang', orders: 56, rate: 81.2 },
-      { name: 'Dương Thị Cẩm Vân-Khóm 4-Đầm Dơi-Cà Mau', orders: 13, rate: 38.2 },
-      { name: 'Đường Tuyến Tránh-Phú Quốc-Kiên Giang', orders: 13, rate: 100.0 },
-      { name: 'Thạnh An-An Minh-Kiên Giang', orders: 10, rate: 12.2 },
-      { name: '729 Đông An-Xã Tân Hiệp-Kiên Giang', orders: 10, rate: 15.4 },
-      { name: '03 Lê Lợi-An Châu-An Giang', orders: 8, rate: 2.6 },
-      { name: '88 Quốc Lộ 61C-Xã Tân Hòa-Hậu Giang', orders: 5, rate: 71.4 },
-      { name: 'Nguyễn Trung Thành Khóm 1-U Minh-Cà Mau', orders: 5, rate: 71.4 },
-      { name: '154B Mai Thị Hồng Hạnh-Rạch Giá-Kiên Giang', orders: 4, rate: 6.2 },
-      { name: 'Xã Cửa Cạn-Phú Quốc-Kiên Giang', orders: 4, rate: 40.0 },
-    ],
-    grandTotal: { orders: 147, rate: 2.9 },
+    date: fmtDateVN(latestDate) || todayVN(),
+    items: items.map((it) => ({ name: it.name, orders: it.orders, rate: it.rate })),
+    grandTotal: { orders: totalOrders, rate: grandTotalRate },
   };
 }
 
-/** Tỉ lệ %OPR TTS AM theo nhân viên */
+/* ======================== %OPR TTS AM theo nhân viên ======================== */
+
 async function fetchOprRanking() {
-  // TODO: thay bằng truy vấn API OPR Tracking thật
-  const items = [
-    { name: 'Chế Minh Công', pct: 41.0 },
-    { name: 'Lê Minh Tú', pct: 50.0 },
-    { name: 'Huỳnh Khánh Duy', pct: 63.9 },
-    { name: 'Nguyễn Bình Định', pct: 70.4 },
-    { name: 'Lê Thanh Tiền', pct: 73.3 },
-    { name: 'Nguyễn Trọng Hậu', pct: 74.7 },
-    { name: 'Đoàn Hồng Thắng', pct: 78.9 },
-    { name: 'Phạm Quốc Huy', pct: 80.7 },
-    { name: 'Nguyễn Phi Hùng', pct: 82.6 },
-    { name: 'Nguyễn Vĩnh Tường', pct: 83.4 },
-    { name: 'Phan Thanh Cần', pct: 83.6 },
-    { name: 'Trần Công Sạch', pct: 89.2 },
-    { name: 'Đỗ Văn Nhì', pct: 96.0 },
-  ];
-  const threshold = 80.0;
-  const good = items.filter((i) => i.pct >= threshold).length;
+  const rows = await fetchSheetObjects(OPS_SHEET_ID, GID.opr);
+  const withDate = rows
+    .map((r) => ({ ...r, __date: parseYmdSlash(r.Ngay) }))
+    .filter((r) => r.__date);
+  if (!withDate.length) {
+    return { date: todayVN(), items: [], threshold: OPR_THRESHOLD_PCT, good: 0, bad: 0, grandTotal: null };
+  }
+
+  const latestDate = withDate.reduce((max, r) => (r.__date > max ? r.__date : max), withDate[0].__date);
+  const todayRows = withDate.filter((r) => isSameYMD(r.__date, latestDate));
+
+  const grandTotalRow = todayRows.find((r) => r['Chi tiết'] === 'Grand Total');
+  const grandTotal = grandTotalRow ? toNumber(grandTotalRow['%OPR']) : null;
+
+  const perAM = new Map();
+  todayRows.forEach((r) => {
+    if (r['Chi tiết'] === 'Grand Total' || !r.AM) return;
+    const vol = toNumber(r['Vol LTC']) || 0;
+    const ontimeVol = toNumber(r['Ontime Volume']) || 0;
+    const acc = perAM.get(r.AM) || { vol: 0, ontimeVol: 0 };
+    acc.vol += vol;
+    acc.ontimeVol += ontimeVol;
+    perAM.set(r.AM, acc);
+  });
+
+  const items = [...perAM.entries()]
+    .map(([name, acc]) => ({ name, pct: acc.vol > 0 ? +((acc.ontimeVol / acc.vol) * 100).toFixed(1) : null }))
+    .filter((it) => it.pct !== null)
+    .sort((a, b) => a.pct - b.pct);
+
+  const good = items.filter((i) => i.pct >= OPR_THRESHOLD_PCT).length;
   const bad = items.length - good;
-  const grandTotal = +(items.reduce((s, i) => s + i.pct, 0) / items.length).toFixed(1);
-  return { date: '20/06/2026', items, threshold, good, bad, grandTotal };
+
+  return {
+    date: fmtDateVN(latestDate),
+    items,
+    threshold: OPR_THRESHOLD_PCT,
+    good,
+    bad,
+    grandTotal,
+  };
 }
 
-/** Chuỗi số liệu cho biểu đồ xu hướng (14 ngày) + Ontime theo tỉnh */
+/* ======================== Xu hướng 14 ngày + Ontime theo tỉnh ======================== */
+
 async function fetchTrends() {
-  // TODO: thay bằng truy vấn lịch sử thật (time-series API)
+  const [revenueRows, gtcRows, fdRows] = await Promise.all([
+    fetchSheetObjects(OPS_SHEET_ID, GID.revenue),
+    fetchSheetObjects(OPS_SHEET_ID, GID.gtcOntime),
+    fetchSheetObjects(OPS_SHEET_ID, GID.fd),
+  ]);
+
+  const revenueParsed = withParsedDate(revenueRows, 'Ngay', parseDdMonYy)
+    .map((r) => toNumber(r.DoanhThu)).filter((v) => v !== null).map((v) => v / 1e9);
+  const revenue14d = revenueParsed.slice(-14);
+
+  const gtcGrandTotals = withParsedDate(gtcRows.filter((r) => r['Chi tiết'] === 'Grand Total'), 'Ngay', parseYmdSlash);
+  const gtc14d = gtcGrandTotals.slice(-14).map((r) => toNumber(r.GTC)).filter((v) => v !== null);
+
+  const fdGrandTotals = withParsedDate(fdRows.filter((r) => r['Chi tiết'] === 'Grand Total'), 'Ngay', parseMdySlash);
+  const fd14d = fdGrandTotals.slice(-14).map((r) => toNumber(r['% Return'])).filter((v) => v !== null);
+
+  // Ontime theo tỉnh — ngày gần nhất có dữ liệu, gộp theo Tỉnh (loại dòng Grand Total).
+  const gtcWithDate = gtcRows.map((r) => ({ ...r, __date: parseYmdSlash(r.Ngay) })).filter((r) => r.__date);
+  let provinces = [];
+  if (gtcWithDate.length) {
+    const latestDate = gtcWithDate.reduce((max, r) => (r.__date > max ? r.__date : max), gtcWithDate[0].__date);
+    const todayRows = gtcWithDate.filter((r) => isSameYMD(r.__date, latestDate) && r['Chi tiết'] !== 'Grand Total' && r['Tỉnh']);
+    const perProvince = new Map();
+    todayRows.forEach((r) => {
+      const gtc = toNumber(r.GTC) || 0;
+      const ontimeVol = toNumber(r['Ontime Volume']) || 0;
+      const acc = perProvince.get(r['Tỉnh']) || { gtc: 0, ontimeVol: 0 };
+      acc.gtc += gtc;
+      acc.ontimeVol += ontimeVol;
+      perProvince.set(r['Tỉnh'], acc);
+    });
+    provinces = [...perProvince.entries()]
+      .map(([name, acc]) => ({ name, ontime: acc.gtc > 0 ? +((acc.ontimeVol / acc.gtc) * 100).toFixed(1) : null }))
+      .filter((p) => p.ontime !== null)
+      .sort((a, b) => b.ontime - a.ontime);
+  }
+
   return {
-    revenue14d: [1.32, 1.41, 1.38, 1.55, 1.62, 1.49, 1.58, 1.71, 1.66, 1.74, 1.69, 1.80, 1.77, 1.85],
-    fd14d: [4.6, 4.4, 4.5, 4.1, 4.3, 3.9, 4.0, 3.7, 3.8, 4.2, 3.6, 3.5, 3.9, 3.8],
-    gtc14d: [15820, 16140, 15980, 16620, 17110, 16840, 17280, 17560, 17320, 17810, 17640, 18120, 17980, 18450],
-    salesByProvince: [
-      { name: 'Cần Thơ', value: 8.7 },
-      { name: 'Kiên Giang', value: 6.4 },
-      { name: 'Cà Mau', value: 4.9 },
-      { name: 'An Giang', value: 4.6 },
-      { name: 'Sóc Trăng', value: 3.8 },
-      { name: 'Đồng Tháp', value: 3.4 },
-      { name: 'Hậu Giang', value: 2.7 },
-      { name: 'Bạc Liêu', value: 2.3 },
-      { name: 'Vĩnh Long', value: 1.8 },
-    ],
-    provinces: [
-      { name: 'Cần Thơ', ontime: 97.1 },
-      { name: 'Kiên Giang', ontime: 90.8 },
-      { name: 'Cà Mau', ontime: 93.4 },
-      { name: 'An Giang', ontime: 95.0 },
-      { name: 'Hậu Giang', ontime: 96.6 },
-      { name: 'Sóc Trăng', ontime: 97.8 },
-      { name: 'Bạc Liêu', ontime: 94.9 },
-      { name: 'Đồng Tháp', ontime: 91.7 },
-      { name: 'Vĩnh Long', ontime: 96.2 },
-    ],
+    revenue14d,
+    fd14d,
+    gtc14d,
+    // Sheet doanh thu chỉ có tổng vùng, không tách theo tỉnh — dashboard đã ẩn chart này.
+    salesByProvince: [],
+    provinces,
   };
 }
 

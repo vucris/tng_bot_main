@@ -292,6 +292,7 @@
     border-radius:var(--radius); padding:18px;
     transition:var(--transition);
     display:flex; flex-direction:column;
+    min-width:0; /* cho phép co lại trong grid — tránh bảng rộng (vd danh sách nhân sự) đẩy tràn trang */
   }
   .panel:hover{border-color:var(--border-strong);}
   .panel-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
@@ -626,13 +627,15 @@
       <div class="kpi-foot"><span class="delta" id="kdRevMTD">—</span><span class="vs">so với tháng trước</span></div>
       <div class="spark"><canvas id="sparkRevMTD" aria-label="Xu hướng lũy kế doanh thu" role="img"></canvas></div>
     </div>
-    <div class="kpi-card module-card" data-module="business">
+    <!-- Ẩn: không có nguồn dữ liệu kế hoạch doanh thu tháng trong Google Sheet hiện tại -->
+    <div class="kpi-card module-card" data-module="business" style="display:none !important">
       <div class="kpi-label"><span class="lbl"><span class="ic">🎯</span><span class="txt" title="Doanh thu lũy kế ÷ kế hoạch tháng">Hoàn thành kế hoạch</span></span><span class="kpi-tag tag-warn">Target</span></div>
       <div class="kpi-value" id="kvBizTarget">—</div>
       <div class="kpi-foot"><span class="vs" id="kdBizTarget">—</span></div>
       <div class="progress-track"><div class="progress-value" id="bizTargetBar" style="width:0"></div></div>
     </div>
-    <div class="kpi-card module-card" data-module="business">
+    <!-- Ẩn: không có nguồn dữ liệu khách hàng SME mới/đang hoạt động -->
+    <div class="kpi-card module-card" data-module="business" style="display:none !important">
       <div class="kpi-label"><span class="lbl"><span class="ic">🧑‍💼</span><span class="txt" title="Khách hàng SME phát sinh đơn đầu tiên hôm nay">Khách hàng SME mới</span></span><span class="kpi-tag tag-good">New</span></div>
       <div class="kpi-value" id="kvBizCustomers">—</div>
       <div class="kpi-foot"><span class="vs" id="kdBizCustomers">—</span></div>
@@ -650,7 +653,8 @@
       <div class="kpi-value" id="kvOntime">—</div>
       <div class="kpi-foot"><span class="delta" id="kdOntime">—</span><span class="vs" id="kdOntimeVs">so với mục tiêu</span></div>
     </div>
-    <div class="kpi-card module-card" data-module="operations">
+    <!-- Ẩn: không có nguồn dữ liệu tỷ lệ giao thành công tổng trong Google Sheet hiện tại -->
+    <div class="kpi-card module-card" data-module="operations" style="display:none !important">
       <div class="kpi-label"><span class="lbl"><span class="ic">✅</span><span class="txt" title="Tỷ lệ đơn giao thành công trên tổng đơn phát">Tỷ lệ giao thành công</span></span><span class="kpi-tag tag-good">Quality</span></div>
       <div class="kpi-value" id="kvOpsSuccess">—</div>
       <div class="progress-track"><div class="progress-value" id="opsSuccessBar" style="width:0;background:linear-gradient(90deg,var(--blue),var(--good))"></div></div>
@@ -667,18 +671,21 @@
       <div class="kpi-value" id="kvPeopleTotal">—</div>
       <div class="kpi-foot"><span class="vs" id="kdPeopleActive">—</span></div>
     </div>
-    <div class="kpi-card module-card" data-module="people">
+    <!-- Ẩn: không có nguồn dữ liệu chấm công trong Google Sheet hiện tại -->
+    <div class="kpi-card module-card" data-module="people" style="display:none !important">
       <div class="kpi-label"><span class="lbl"><span class="ic">🕐</span><span class="txt" title="Tỷ lệ nhân sự chấm công hợp lệ hôm nay">Tỷ lệ chấm công</span></span><span class="kpi-tag tag-good">Today</span></div>
       <div class="kpi-value" id="kvPeopleAttendance">—</div>
       <div class="kpi-foot"><span class="delta" id="kdPeopleAttendance">—</span><span class="vs" id="kdPeopleAttendanceVs">so với mục tiêu</span></div>
       <div class="spark"><canvas id="sparkAttendance" aria-label="Chấm công 7 ngày" role="img"></canvas></div>
     </div>
-    <div class="kpi-card module-card" data-module="people">
+    <!-- Ẩn: không có nguồn dữ liệu nghỉ phép/vắng mặt trong Google Sheet hiện tại -->
+    <div class="kpi-card module-card" data-module="people" style="display:none !important">
       <div class="kpi-label"><span class="lbl"><span class="ic">🌴</span><span class="txt" title="Nhân sự nghỉ phép có đăng ký hôm nay">Nghỉ phép / vắng mặt</span></span><span class="kpi-tag tag-warn">Alert</span></div>
       <div class="kpi-value" id="kvPeopleLeave">—</div>
       <div class="kpi-foot"><span class="delta" id="kdPeopleAbsent">—</span><span class="vs">vắng không phép</span></div>
     </div>
-    <div class="kpi-card module-card" data-module="people">
+    <!-- Ẩn: không có nguồn dữ liệu tuyển dụng trong Google Sheet hiện tại -->
+    <div class="kpi-card module-card" data-module="people" style="display:none !important">
       <div class="kpi-label"><span class="lbl"><span class="ic">📋</span><span class="txt" title="Số vị trí đang mở tuyển trong vùng">Vị trí đang tuyển</span></span><span class="kpi-tag" style="background:rgba(167,139,250,.13);color:var(--purple)">Hiring</span></div>
       <div class="kpi-value" id="kvPeopleHiring">—</div>
       <div class="kpi-foot"><span class="vs" id="kdPeopleHires">—</span></div>
@@ -689,7 +696,7 @@
   <div class="section-label">Biểu đồ xu hướng</div>
 
   <div class="grid-2 module-grid" data-module="business">
-    <div class="panel" data-region="revenueChart">
+    <div class="panel" data-region="revenueChart" style="grid-column:1/-1">
       <div class="panel-head">
         <h3>Doanh thu SME — <span id="revRangeLabel">14 ngày gần nhất</span></h3>
         <div class="kpi-chip"><span class="dot dot-good"></span>Tăng trưởng MoM <b id="momGrowth" style="margin-left:4px">—</b></div>
@@ -701,7 +708,8 @@
         <div class="data-state st-error"><div class="ds-icon">⚠️</div><div class="ds-msg">Không tải được dữ liệu doanh thu.</div><button class="ds-retry" type="button" onclick="refreshData()">Thử lại</button></div>
       </div>
     </div>
-    <div class="panel" data-region="salesProvinceChart">
+    <!-- Ẩn: sheet doanh thu chỉ có tổng vùng, không tách theo tỉnh -->
+    <div class="panel" data-region="salesProvinceChart" style="display:none !important">
       <div class="panel-head">
         <h3>Đóng góp doanh thu theo tỉnh</h3>
         <div class="mini-toggle" role="group" aria-label="Số tỉnh hiển thị">
@@ -788,7 +796,7 @@
   </div>
 
   <div class="grid-2eq module-grid" data-module="people">
-    <div class="panel" data-region="headcountChart">
+    <div class="panel" data-region="headcountChart" style="grid-column:1/-1">
       <div class="panel-head">
         <h3>Biên chế theo tỉnh</h3>
         <div class="kpi-chip"><span class="dot dot-good"></span><span id="peopleActiveChip">—</span></div>
@@ -800,7 +808,8 @@
         <div class="data-state st-error"><div class="ds-icon">⚠️</div><div class="ds-msg">Không tải được dữ liệu.</div><button class="ds-retry" type="button" onclick="refreshData()">Thử lại</button></div>
       </div>
     </div>
-    <div class="panel" data-region="attendanceChart">
+    <!-- Ẩn: không có nguồn dữ liệu chấm công trong Google Sheet hiện tại -->
+    <div class="panel" data-region="attendanceChart" style="display:none !important">
       <div class="panel-head">
         <h3>Tỷ lệ chấm công — 7 ngày</h3>
         <div class="kpi-chip"><span class="dot dot-amber"></span>Mục tiêu <span id="attendanceTargetChip" style="margin-left:3px">—</span></div>
@@ -818,7 +827,8 @@
   <div class="section-label" id="detailSectionLabel">Phân tích chi tiết</div>
 
   <div class="grid-2eq module-grid" data-module="business">
-    <div class="panel">
+    <!-- Ẩn: không có nguồn dữ liệu kế hoạch doanh thu tháng trong Google Sheet hiện tại -->
+    <div class="panel" style="display:none !important">
       <div class="panel-head">
         <h3>Tiến độ kế hoạch kinh doanh</h3>
         <div class="meta" id="planMonthLabel">Tháng hiện tại</div>
@@ -838,17 +848,20 @@
         </div>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel" style="grid-column:1/-1">
       <div class="panel-head">
         <h3>Điểm nhấn kinh doanh</h3>
         <div class="kpi-chip" id="bizHighlightChip"><span class="dot dot-good"></span>—</div>
       </div>
       <div class="insight-list">
+        <div class="insight-row"><span class="label">💵 Doanh thu lũy kế tháng</span><span class="value" id="bizRevenueMTDInsight">—</span></div>
         <div class="insight-row"><span class="label">🚀 Tăng trưởng so với tháng trước</span><span class="value" id="bizGrowthInsight">—</span></div>
         <div class="insight-row"><span class="label">📊 Doanh thu bình quân/ngày (đã qua)</span><span class="value" id="bizDailyAverage">—</span></div>
-        <div class="insight-row"><span class="label">🏆 Tỉnh đóng góp cao nhất</span><span class="value" id="bizTopProvince">—</span></div>
-        <div class="insight-row"><span class="label">🧑‍💼 Khách hàng mới hôm nay</span><span class="value" id="bizNewCustomerInsight">—</span></div>
-        <div class="insight-row"><span class="label">👥 Khách hàng SME đang hoạt động</span><span class="value" id="bizActiveCustomers">—</span></div>
+        <!-- Ẩn: sheet doanh thu không tách theo tỉnh nên không xác định được tỉnh cao nhất -->
+        <div class="insight-row" style="display:none !important"><span class="label">🏆 Tỉnh đóng góp cao nhất</span><span class="value" id="bizTopProvince">—</span></div>
+        <!-- Ẩn: không có nguồn dữ liệu khách hàng SME -->
+        <div class="insight-row" style="display:none !important"><span class="label">🧑‍💼 Khách hàng mới hôm nay</span><span class="value" id="bizNewCustomerInsight">—</span></div>
+        <div class="insight-row" style="display:none !important"><span class="label">👥 Khách hàng SME đang hoạt động</span><span class="value" id="bizActiveCustomers">—</span></div>
       </div>
     </div>
   </div>
@@ -882,7 +895,7 @@
   </div>
 
   <div class="grid-2eq module-grid" data-module="people">
-    <div class="panel">
+    <div class="panel" style="grid-column:1/-1">
       <div class="panel-head">
         <h3>Tỉ lệ %OPR TTS AM</h3>
         <div class="meta" id="oprDate">—</div>
@@ -898,7 +911,8 @@
         Grand Total <b id="oprGrandTotal">—</b>
       </div>
     </div>
-    <div class="panel">
+    <!-- Ẩn: không có nguồn dữ liệu chấm công/nghỉ phép trong Google Sheet hiện tại -->
+    <div class="panel" style="display:none !important">
       <div class="panel-head">
         <h3>Ngoại lệ chấm công hôm nay</h3>
         <div class="meta" id="peopleExceptionDate">—</div>
@@ -1810,6 +1824,7 @@ function renderBusinessDetail(){
     if(s.revenueMTD !== null) setText('bizRevenueActual', fmtBillion(s.revenueMTD));
   }
 
+  setText('bizRevenueMTDInsight', s.revenueMTD !== null ? fmtBillion(s.revenueMTD) : 'Chưa có dữ liệu');
   setText('bizGrowthInsight', s.growthMoMPct !== null ? `${s.growthMoMPct>=0?'+':''}${fmtNum(s.growthMoMPct)}%` : 'Chưa có dữ liệu');
   const chip = document.getElementById('bizHighlightChip');
   if(s.growthMoMPct !== null){
