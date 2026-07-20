@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+npm-debug.log*
+data/people-demo.tsv
+node_modules/

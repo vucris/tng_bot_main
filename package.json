@@ -1,0 +1,22 @@
+{
+  "name": "ghn-tnb-ops-bot",
+  "version": "1.0.0",
+  "description": "Bot cảnh báo KPI hằng ngày & tự động trả lời qua GTalk cho vùng Tây Nam Bộ (GHN)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "scheduler": "node src/scheduler.js",
+    "send-now": "node -e \"require('./src/scheduler').runMorningAlert()\""
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
