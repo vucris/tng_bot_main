@@ -161,7 +161,7 @@ async function verifyIdToken(idToken, expectedNonce) {
       algorithms: ['RS256'],
     });
   } catch (err) {
-    console.error('[sso] Verify id_token thất bại:', err.message, '— thực tế iss/aud trong token:', decodedHeader.payload?.iss, decodedHeader.payload?.aud);
+    console.error('[sso] Verify id_token thất bại:', err.message, '— toàn bộ payload thật:', JSON.stringify(decodedHeader.payload));
     throw err;
   }
 
