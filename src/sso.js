@@ -153,16 +153,18 @@ async function verifyIdToken(idToken, expectedNonce) {
   if (!decodedHeader) throw new Error('ID token không hợp lệ (không decode được)');
 
   const publicKey = await getSigningKey(decodedHeader.header);
-  let claims;
-  try {
-    claims = jwt.verify(idToken, publicKey, {
-      issuer: SSO_BASE,
-      audience: CLIENT_ID,
-      algorithms: ['RS256'],
-    });
-  } catch (err) {
-    console.error('[sso] Verify id_token thất bại:', err.message, '— toàn bộ payload thật:', JSON.stringify(decodedHeader.payload));
-    throw err;
+  const claims = jwt.verify(idToken, publicKey, {
+    issuer: SSO_BASE,
+    algorithms: ['RS256'],
+  });
+
+  // GHN SSO v2 production trả aud rỗng ("") trong id_token, khác với ví dụ trong
+  // tài liệu tích hợp (aud = client_id) — nên không thể để jwt.verify() tự chặn theo
+  // audience. Luồng code+PKCE+client_secret_basic khi đổi token đã tự đảm bảo token
+  // này chỉ cấp được cho đúng client này; ở đây chỉ từ chối khi aud có giá trị thật
+  // nhưng khác client_id (đề phòng token cấp cho client khác), bỏ qua khi aud rỗng.
+  if (claims.aud && claims.aud !== CLIENT_ID) {
+    throw new Error(`aud không khớp client_id hiện tại (aud thực tế: ${claims.aud})`);
   }
 
   if (typeof claims.exp !== 'number') throw new Error('ID token không có exp');
