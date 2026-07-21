@@ -16,11 +16,13 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
 
-const SSO_BASE = process.env.SSO_BASE_URL || 'https://dev-online-gateway.ghn.vn/sso-v2/public-api';
-const CLIENT_ID = process.env.SSO_CLIENT_ID;
-const CLIENT_SECRET = process.env.SSO_CLIENT_SECRET;
-const REDIRECT_URI = process.env.SSO_REDIRECT_URI;
-const POST_LOGOUT_REDIRECT_URI = process.env.SSO_POST_LOGOUT_REDIRECT_URI;
+// .trim() vì các giá trị này thường được copy/paste vào Render dashboard,
+// dễ dính khoảng trắng/newline thừa làm so sánh chuỗi (vd. audience JWT) fail âm thầm.
+const SSO_BASE = (process.env.SSO_BASE_URL || 'https://dev-online-gateway.ghn.vn/sso-v2/public-api').trim();
+const CLIENT_ID = (process.env.SSO_CLIENT_ID || '').trim();
+const CLIENT_SECRET = (process.env.SSO_CLIENT_SECRET || '').trim();
+const REDIRECT_URI = (process.env.SSO_REDIRECT_URI || '').trim();
+const POST_LOGOUT_REDIRECT_URI = (process.env.SSO_POST_LOGOUT_REDIRECT_URI || '').trim();
 const REQUEST_TIMEOUT_MS = Number(process.env.SSO_REQUEST_TIMEOUT_MS || 10000);
 const BACKCHANNEL_LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';
 
@@ -151,11 +153,17 @@ async function verifyIdToken(idToken, expectedNonce) {
   if (!decodedHeader) throw new Error('ID token không hợp lệ (không decode được)');
 
   const publicKey = await getSigningKey(decodedHeader.header);
-  const claims = jwt.verify(idToken, publicKey, {
-    issuer: SSO_BASE,
-    audience: CLIENT_ID,
-    algorithms: ['RS256'],
-  });
+  let claims;
+  try {
+    claims = jwt.verify(idToken, publicKey, {
+      issuer: SSO_BASE,
+      audience: CLIENT_ID,
+      algorithms: ['RS256'],
+    });
+  } catch (err) {
+    console.error('[sso] Verify id_token thất bại:', err.message, '— thực tế iss/aud trong token:', decodedHeader.payload?.iss, decodedHeader.payload?.aud);
+    throw err;
+  }
 
   if (typeof claims.exp !== 'number') throw new Error('ID token không có exp');
   if (!claims.sub) throw new Error('ID token không có sub');
